@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="css/style.css" rel="stylesheet">
+  <title>{{title}}</title>
+  <link rel="icon" type="image/x-icon" href="images/favicon.png">
+</head>
+<body class="">
+
+  <div class="h-full min-h-screen flex flex-col justify-stretch items-stretch">
+
+    {{#if isTypeProject}}
+    {{> main_navigation isProject=true }}
+    {{/if}}
+    {{#if isTypeEdition}}
+    {{> main_navigation isEdition=true }}
+    {{/if}}
+
+
+  <main class="w-full max-w-[1500px] mx-auto flex flex-col px-6 mt-10 grow content-stretch">
+    <h1 class="text-2xl mb-16">{{title}}</h1>
+
+    <div class="flex flex-col md:flex-row grow content-stretch">
+      <div class="w-full md:w-1/4">
+        <div class="text-sm text-neutral-600">Filters</div>
+        
+        <div id="facetsList" class="flex flex-col gap-4 mt-2"></div>
+      </div>
+      <div class="w-full md:w-3/4 flex flex-col justify-between">
+
+
+        <div class="bg-puregreen-300 w-full grow content-stretch border-b border-b-white">
+          <ul id="filterList" class="bg-puregreen-300 w-full grid md:grid-cols-2 lg:grid-cols-3 justify-center gap-6 flex-wrap px-6 pb-6"> 
+            {{#if isTypeProject}}
+              {{#each projects}}
+              {{>project-card}}
+              {{/each}}
+            {{/if}}
+            {{#if isTypeEdition}}
+              {{#each editions}}
+              {{>project-card}}
+              {{/each}}
+            {{/if}}
+            
+            
+            {{!-- 
+            <li id="surprise" class="bg-pureblue-600 text-white py-10 px-4 -mt-6 mb-6 h-[300px] lg:h-[350px] shadow-md inc-card order-1 flex flex-col justify-around gap-6">
+              <div class="">
+                <h2 >Get inspired</h2>
+              Surprise me with an inspiring 3D project.
+              </div>
+              <div class="">
+                <a href="all-projects.html" class="text-white p-3 border border-puregreen-500 rounded-md hover:bg-pureblue-700 transition">Surprise me!</a>
+              </div>
+            </li>
+            --}}
+  
+  
+          </ul>
+        </div>
+
+
+      </div>
+    </div>
+  
+
+
+
+
+
+
+
+  </main>
+  {{>main_footer}}
+</div>
+  
+  <script src="js/tag-to-filter.js"></script>
+</body>
+</html>
