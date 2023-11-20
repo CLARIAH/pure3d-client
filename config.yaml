@@ -2,3 +2,4 @@ locations:
   dataIn: ~/local/pure3d/client/input
   dataOut: ~/local/pure3d/client/dist
   partialsIn: «base»/p3d/components
+  templates: «base»/p3d/templates

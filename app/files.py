@@ -1,4 +1,5 @@
 import os
+import json
 import yaml
 
 from shutil import rmtree, copytree, copy
@@ -328,6 +329,27 @@ def chDir(directory):
         The directory to change to.
     """
     return os.chdir(directory)
+
+
+def readJson(text=None, plain=False, asFile=None, preferTuples=False):
+    if asFile is None:
+        cfg = json.loads(text)
+    else:
+        if fileExists(asFile):
+            with open(asFile, encoding="utf8") as fh:
+                cfg = json.load(fh)
+        else:
+            cfg = {}
+
+    return cfg if plain else deepAttrDict(cfg, preferTuples=preferTuples)
+
+
+def writeJson(data, asFile=None):
+    if asFile is None:
+        return json.dumps(data, ensure_ascii=False)
+
+    with open(asFile, "w", encoding="utf8") as fh:
+        json.dump(data, fh, ensure_ascii=False)
 
 
 def readYaml(text=None, plain=False, asFile=None, preferTuples=True):
