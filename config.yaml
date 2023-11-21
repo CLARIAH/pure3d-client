@@ -3,3 +3,6 @@ locations:
   dataOut: ~/local/pure3d/client/dist
   partialsIn: «base»/p3d/components
   templates: «base»/p3d/templates
+  js: «base»/p3d/js
+  cssIn: «base»/p3d/css/input-p3d.css
+  cssOut: ~/local/pure3d/client/dist/css/style.css

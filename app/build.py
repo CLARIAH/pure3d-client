@@ -29,9 +29,7 @@ TAILWIND_CFG = "tailwind.config.js"
 class Build:
     def __init__(self):
         baseDir = dirNm(dirNm(abspath(__file__)))
-        self.baseDir = baseDir
         localDir = f"{baseDir}/_local"
-        self.localDir = localDir
 
         cfgFile = f"{baseDir}/{CONFIG_FILE}"
         cfg = readYaml(asFile=cfgFile)
@@ -44,15 +42,16 @@ class Build:
             v = v.replace("«base»", baseDir)
             locations[k] = ex(v)
 
-        outDir = locations.dataOut
+        locations.baseDir = baseDir
+        locations.localDir = localDir
 
         self.Handlebars = Compiler()
 
         initTree(locations.dataIn, fresh=False)
 
-        T = Tailwind(baseDir, localDir, TAILWIND_CFG, outDir)
+        T = Tailwind(locations, TAILWIND_CFG)
         T.install()
-        self.tailwindBin = T.binPath
+        self.T = T
 
     def getData(self, target):
         locations = self.locations
@@ -96,6 +95,10 @@ class Build:
         print(f"{len(partials)} partials compiled")
 
     def generate(self):
+        T = self.T
+        if not (T.generate()):
+            return False
+
         locations = self.locations
         dataInDir = locations.dataIn
         filesDir = f"{dataInDir}/files"
@@ -104,7 +107,7 @@ class Build:
         Handlebars = self.Handlebars
         partials = self.partials
 
-        initTree(outDir, fresh=True, gentle=False)
+        initTree(outDir, fresh=False, gentle=True)
 
         def genTarget(target):
             data = self.getData(target)
@@ -113,7 +116,6 @@ class Build:
             if target == "index":
                 for file in dirContents(filesDir)[0]:
                     fileCopy(f"{filesDir}/{file}", f"{outDir}/{file}")
-                    pass
 
             with open(templateFile) as fh:
                 tContent = COMMENT_RE.sub("", fh.read())
@@ -129,14 +131,21 @@ class Build:
 
             except Exception as e:
                 console(f"{templateFile} : {str(e)}")
+                return False
+
+            return True
+
+        good = True
 
         for target in ("index",):
-            genTarget(target)
+            if not genTarget(target):
+                good = False
+
+        return good
 
     def build(self):
         self.registerPartials()
-        self.generate()
-        return True
+        return self.generate()
 
 
 def main():
