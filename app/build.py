@@ -5,8 +5,6 @@ from pybars import Compiler
 from markdown import markdown
 
 from files import (
-    dirExists,
-    dirRemove,
     dirContents,
     dirUpdate,
     dirNm,
@@ -15,6 +13,7 @@ from files import (
     abspath,
     readYaml,
     readJson,
+    writeJson,
     initTree,
     dirAllFiles,
     expanduser as ex,
@@ -85,6 +84,8 @@ class Build:
     def getData(self, target):
         rawData = self.rawData
         data = self.data
+        pMap = self.pMap
+        eMap = self.eMap
 
         if target in data:
             return data[target]
@@ -112,10 +113,12 @@ class Build:
             result = []
 
             for item in info:
+                itemId = item._id["$oid"]
+                itemNo = pMap.get(itemId, itemId)
                 r = AttrDict()
                 r.peName = item.title
-                r.prId = item._id["$oid"]
-                r.peLink = f"project/{r.prId}.html"
+                r.prId = itemNo
+                r.peLink = f"project/{itemNo}.html"
                 r.peDescription = item.dc.description
                 r.peAbstract = item.dc.abstract
                 r.peVisible = item.isVisible
@@ -127,11 +130,15 @@ class Build:
             result = []
 
             for item in info:
+                itemId = item._id["$oid"]
+                itemProjectId = item.projectId["$oid"]
+                itemProjectNo = pMap.get(itemProjectId, itemProjectId)
+                itemNo = eMap.get(itemProjectId, {}).get(itemId, itemId)
                 r = AttrDict()
                 r.peName = item.title
-                r.prId = item.projectId["$oid"]
-                r.edId = item._id["$oid"]
-                r.peLink = f"project/{r.prId}/edition/{r.edId}.html"
+                r.prId = itemProjectId
+                r.edId = itemNo
+                r.peLink = f"project/{itemProjectNo}/edition/{itemNo}.html"
                 r.peDescription = item.dc.description
                 r.peAbstract = item.dc.abstract
                 r.pePublished = item.isPublished
@@ -178,33 +185,63 @@ class Build:
             c = cOuter
             d = dOuter
 
-            for project in dirContents(projectInDir)[1]:
-                pInDir = f"{projectInDir}/{project}"
-                pOutDir = f"{projectOutDir}/{project}"
+            pMap = {}
+            eMap = {}
+            self.pMap = pMap
+            self.eMap = eMap
+
+            pCount = 0
+
+            for pNum in dirContents(projectOutDir)[1]:
+                pId = readJson(asFile=f"{projectOutDir}/{pNum}/id.json").id
+                pMap[pId] = pNum
+
+            for pId in dirContents(projectInDir)[1]:
+                if pId in pMap:
+                    pNum = pMap[pId]
+                else:
+                    pCount += 1
+                    pNum = pCount
+                    pMap[pId] = pNum
+
+                pInDir = f"{projectInDir}/{pId}"
+                pOutDir = f"{projectOutDir}/{pNum}"
                 goodProject, cProject, dProject = dirUpdate(
                     pInDir, pOutDir, recursive=False
                 )
                 c += cProject
                 d += dProject
+                writeJson(dict(id=pId), asFile=f"{projectOutDir}/{pNum}/id.json")
 
                 editionInDir = f"{pInDir}/edition"
                 editionOutDir = f"{pOutDir}/edition"
 
-                for edition in dirContents(editionInDir)[1]:
-                    eInDir = f"{editionInDir}/{edition}"
-                    eOutDir = f"{editionOutDir}/{edition}"
+                eCount = 0
+
+                thisEMap = {}
+
+                for eNum in dirContents(editionOutDir)[1]:
+                    eId = readJson(asFile=f"{editionOutDir}/{eNum}/id.json").id
+                    thisEMap[eId] = eNum
+
+                for eId in dirContents(editionInDir)[1]:
+                    if eId in thisEMap:
+                        eNum = thisEMap[eId]
+                    else:
+                        eCount += 1
+                        eNum = eCount
+                        thisEMap[eId] = eNum
+
+                    eInDir = f"{editionInDir}/{eId}"
+                    eOutDir = f"{editionOutDir}/{eNum}"
                     goodEdition, cEdition, dEdition = dirUpdate(
                         eInDir, eOutDir
                     )
                     c += cEdition
                     d += dEdition
+                    writeJson(dict(id=eId), asFile=f"{editionOutDir}/{eNum}/id.json")
 
-            for project in dirContents(projectOutDir)[1]:
-                pInDir = f"{projectInDir}/{project}"
-                pOutDir = f"{projectOutDir}/{project}"
-                if not dirExists(pInDir):
-                    dirRemove(pOutDir)
-                    d += 1
+                eMap[pId] = thisEMap
 
             report = f"{c:>3} copied, {d:>3} deleted"
             console(f"{'updated':<10} {'data':<12} {report:<24} to {filesOutDir}")
