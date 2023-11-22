@@ -91,7 +91,7 @@ class Tailwind:
             with open(configOutPath, "w") as fh:
                 fh.write(text)
 
-    def generate(self):
+    def generate(self, verbose=False):
         """Generate the css file.
 
         Issues:
@@ -159,8 +159,9 @@ class Tailwind:
         cssIn = locations.cssIn
         cssOut = locations.cssOut
         cmdLine = f"""{binPath}  -c {cfgOut} -i {cssIn} -o {cssOut}"""
-        print(cmdLine)
         good, stdOut, stdErr = run(cmdLine)
-        console(stdOut)
-        console(stdErr)
+        if verbose or not good:
+            console(stdOut)
+            console(stdErr)
+        console(f"{'tailwind':<10} {'css':<12} {'':<24} to {cssOut}")
         return good

@@ -2,9 +2,13 @@ import sys
 import re
 
 from pybars import Compiler
+from markdown import markdown
 
 from files import (
-    fileCopy,
+    dirExists,
+    dirRemove,
+    dirContents,
+    dirUpdate,
     dirNm,
     baseNm,
     stripExt,
@@ -12,10 +16,10 @@ from files import (
     readYaml,
     readJson,
     initTree,
-    dirContents,
     dirAllFiles,
     expanduser as ex,
 )
+from generic import AttrDict
 from helpers import console
 from tailwind import Tailwind
 
@@ -38,6 +42,8 @@ class Build:
         locations = cfg.locations
         self.locations = locations
 
+        self.markdownKeys = set(cfg.markdown.keys)
+
         for k, v in locations.items():
             v = v.replace("«base»", baseDir)
             locations[k] = ex(v)
@@ -53,69 +59,194 @@ class Build:
         T.install()
         self.T = T
 
-    def getData(self, target):
+        self.rawData = AttrDict()
+        self.data = AttrDict()
+
+    def getRawData(self):
+        rawData = self.rawData
+
         locations = self.locations
         dataInDir = locations.dataIn
         dbDir = f"{dataInDir}/db/json"
-        # fileDir = f"{dataInDir}/files"
 
-        if target == "index":
-            result = readJson(asFile=f"{dbDir}/site.json")[0]
-            result.template = "p3d-home.html"
-            result.file_name = "index.html"
-            dc = result.dc
-            result.title = dc.title
-            result.contentdata = dc
+        for kind in ("site", "project", "edition"):
+            rawData[kind] = readJson(asFile=f"{dbDir}/{kind}.json")
 
+    def htmlify(self, info):
+        markdownKeys = self.markdownKeys
+
+        r = AttrDict()
+
+        for (k, v) in info.items():
+            r[k] = markdown(v) if k in markdownKeys else v
+
+        return r
+
+    def getData(self, target):
+        rawData = self.rawData
+        data = self.data
+
+        if target in data:
+            return data[target]
+
+        info = rawData[target]
+
+        # print(f"{target=}\n\n")
+        # print(f"{info=}\n\n\n\n\n")
+
+        if target == "site":
+            item = info[0]
+            dc = self.htmlify(item.dc)
+
+            r = AttrDict()
+            r.template = "p3d-home.html"
+            r.file_name = "index.html"
+            r.title = dc.title
+            r.contentdata = dc
+            r.projects = self.getData("project")
+            r.editions = self.getData("edition")
+
+            result = r
+
+        elif target == "project":
+            result = []
+
+            for item in info:
+                r = AttrDict()
+                r.peName = item.title
+                r.prId = item._id["$oid"]
+                r.peLink = f"project/{r.prId}.html"
+                r.peDescription = item.dc.description
+                r.peAbstract = item.dc.abstract
+                r.peVisible = item.isVisible
+                r.peSubjects = item.dc.subject
+                r.isTypeProject = True
+                result.append(r)
+
+        elif target == "edition":
+            result = []
+
+            for item in info:
+                r = AttrDict()
+                r.peName = item.title
+                r.prId = item.projectId["$oid"]
+                r.edId = item._id["$oid"]
+                r.peLink = f"project/{r.prId}/edition/{r.edId}.html"
+                r.peDescription = item.dc.description
+                r.peAbstract = item.dc.abstract
+                r.pePublished = item.isPublished
+                r.peSubjects = item.dc.subject
+                r.isTypeEdition = True
+                result.append(r)
+
+        else:
+            result = None
+
+        data[target] = result
         return result
 
-    def registerPartials(self):
-        locations = self.locations
-        partialsIn = locations.partialsIn
-        Handlebars = self.Handlebars
-
-        partials = {}
-
-        for partialFile in dirAllFiles(partialsIn):
-            pDir = dirNm(partialFile).replace(partialsIn, "").strip("/")
-            pFile = baseNm(partialFile)
-            pName = stripExt(pFile)
-            sep = "" if pDir == "" else "/"
-            partial = f"{pDir}{sep}{pName}"
-
-            with open(partialFile) as fh:
-                pContent = COMMENT_RE.sub("", fh.read())
-
-            try:
-                partials[partial] = Handlebars.compile(pContent)
-            except Exception as e:
-                console(f"{partial} : {str(e)}")
-
-        self.partials = partials
-        print(f"{len(partials)} partials compiled")
-
     def generate(self):
-        T = self.T
-        if not (T.generate()):
-            return False
-
         locations = self.locations
         dataInDir = locations.dataIn
-        filesDir = f"{dataInDir}/files"
+        dataOutDir = locations.dataOut
+        filesInDir = f"{dataInDir}/files"
+        projectInDir = f"{filesInDir}/project"
         templateDir = locations.templates
-        outDir = locations.dataOut
+        filesOutDir = f"{dataOutDir}/files"
+        projectOutDir = f"{filesOutDir}/project"
         Handlebars = self.Handlebars
-        partials = self.partials
+        partialsIn = locations.partialsIn
+        T = self.T
 
-        initTree(outDir, fresh=False, gentle=True)
+        partials = {}
+        self.partials = partials
+
+        def copyFromExport():
+            """Copies the export data files to the static file area.
+
+            The copy is incremental at the levels of projects and editions.
+
+            That means: projects and editions will not be removed from the static file
+            area.
+
+            So if your export contains a single or a few projects and editions,
+            they will be used to update the static file area without affecting material
+            of the static file area that is outside these projects and editions.
+            """
+
+            goodOuter, cOuter, dOuter = dirUpdate(filesInDir, filesOutDir, recursive=False)
+            c = cOuter
+            d = dOuter
+
+            for project in dirContents(projectInDir)[1]:
+                pInDir = f"{projectInDir}/{project}"
+                pOutDir = f"{projectOutDir}/{project}"
+                goodProject, cProject, dProject = dirUpdate(
+                    pInDir, pOutDir, recursive=False
+                )
+                c += cProject
+                d += dProject
+
+                editionInDir = f"{pInDir}/edition"
+                editionOutDir = f"{pOutDir}/edition"
+
+                for edition in dirContents(editionInDir)[1]:
+                    eInDir = f"{editionInDir}/{edition}"
+                    eOutDir = f"{editionOutDir}/{edition}"
+                    goodEdition, cEdition, dEdition = dirUpdate(
+                        eInDir, eOutDir
+                    )
+                    c += cEdition
+                    d += dEdition
+
+            for project in dirContents(projectOutDir)[1]:
+                pInDir = f"{projectInDir}/{project}"
+                pOutDir = f"{projectOutDir}/{project}"
+                if not dirExists(pInDir):
+                    dirRemove(pOutDir)
+                    d += 1
+
+            report = f"{c:>3} copied, {d:>3} deleted"
+            console(f"{'updated':<10} {'data':<12} {report:<24} to {filesOutDir}")
+            return goodOuter and goodProject
+
+        def copyStaticFolder(kind):
+            srcDir = locations[kind]
+            dstDir = f"{dataOutDir}/{kind}"
+            (good, c, d) = dirUpdate(srcDir, dstDir)
+            report = f"{c:>3} copied, {d:>3} deleted"
+            console(f"{'updated':<10} {kind:<12} {report:<24} to {dstDir}")
+            return good
+
+        def registerPartials():
+            good = True
+
+            for partialFile in dirAllFiles(partialsIn):
+                pDir = dirNm(partialFile).replace(partialsIn, "").strip("/")
+                pFile = baseNm(partialFile)
+                pName = stripExt(pFile)
+                sep = "" if pDir == "" else "/"
+                partial = f"{pDir}{sep}{pName}"
+
+                with open(partialFile) as fh:
+                    pContent = COMMENT_RE.sub("", fh.read())
+
+                try:
+                    partials[partial] = Handlebars.compile(pContent)
+                except Exception as e:
+                    console(f"{partial} : {str(e)}")
+                    good = False
+
+            report = f"{len(partials):<3} pieces"
+            console(f"{'compiled':<10} {'partials':<12} {report:<24} to memory")
+            return good
+
+        def genCss():
+            return T.generate()
 
         def genTarget(target):
             data = self.getData(target)
             templateFile = f"{templateDir}/{data.template}"
-
-            if target == "index":
-                for file in dirContents(filesDir)[0]:
-                    fileCopy(f"{filesDir}/{file}", f"{outDir}/{file}")
 
             with open(templateFile) as fh:
                 tContent = COMMENT_RE.sub("", fh.read())
@@ -123,28 +254,47 @@ class Build:
             try:
                 template = Handlebars.compile(tContent)
                 result = template(data, partials=partials)
-                path = f"{outDir}/{data.file_name}"
+                path = f"{dataOutDir}/{data.file_name}"
 
                 with open(path, "w") as fh:
                     fh.write(result)
-                console(f"{target} generated in {path}")
 
             except Exception as e:
                 console(f"{templateFile} : {str(e)}")
                 return False
 
+            report = f"{'1':>3} file"
+            console(f"{'generated':<10} {target:<12} {report:<24} to {path}")
             return True
 
         good = True
 
-        for target in ("index",):
+        if not copyFromExport():
+            good = False
+
+        for kind in ("js", "images"):
+            if not copyStaticFolder(kind):
+                good = False
+
+        if not registerPartials():
+            good = False
+
+        if not genCss():
+            good = False
+
+        self.getRawData()
+
+        for target in ("site",):
             if not genTarget(target):
                 good = False
 
+        if good:
+            console("All tasks successful")
+        else:
+            console("Some tasks failed", error=True)
         return good
 
     def build(self):
-        self.registerPartials()
         return self.generate()
 
 

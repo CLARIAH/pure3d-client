@@ -70,7 +70,7 @@ def clearTree(path):
     path = expanduser(path)
 
     with os.scandir(path) as dh:
-        for (i, entry) in enumerate(dh):
+        for i, entry in enumerate(dh):
             name = entry.name
             if name.startswith("."):
                 continue
@@ -224,13 +224,112 @@ def dirCopy(pathSrc, pathDst, noclobber=False):
         return False
 
 
+def dirUpdate(pathSrc, pathDst, force=False, delete=True, recursive=True):
+    """Makes a destination dir equal to a source dir by copying newer files only.
+
+    Files of the source dir that are missing or older in the destination dir are
+    copied from the source to the destination.
+    Files and directories in the destination dir that do not exist in the source
+    dir are deleted.
+
+    Parameters
+    ----------
+    pathSrc: string
+        The source directory. It does not matter whether the directory ends with
+        a slash or not, unless the directory is the root.
+    pathDst: string
+        The destination directory. It does not matter whether the directory ends with
+        a slash or not, unless the directory is the root.
+    force: boolean, optional False
+        If True, files that are older in the source than in the destination will also
+        be copied.
+    delete: boolean, optional False
+        Whether to delete items from the destination that do not exist in the source.
+    recursive: boolean, optional True
+        Whether to perform the action recursively.
+        If it is False, only the files in the source and destination are compared
+        and, if needed, copied or deleted.
+    """
+
+    if not dirExists(pathSrc):
+        return (False, 0, 0)
+
+    srcPath = pathSrc.rstrip("/")
+    dstPath = pathDst.rstrip("/")
+
+    if not dirExists(pathDst):
+        if recursive:
+            return (dirCopy(pathSrc, pathDst), 1, 0)
+        else:
+            if fileExists(pathDst):
+                return (False, 0, 0)
+            dirMake(pathDst)
+
+            for item in dirContents(pathSrc)[0]:
+                fileCopy(f"{pathSrc}/{item}", f"{pathDst}/{item}")
+            return (True, 1, 0)
+
+    (good, cActions, dActions) = (True, 0, 0)
+    (srcFiles, srcDirs) = dirContents(pathSrc, asSet=True)
+    (dstFiles, dstDirs) = dirContents(pathDst, asSet=True)
+
+    for item in srcFiles:
+        src = f"{srcPath}/{item}"
+        dst = f"{dstPath}/{item}"
+
+        if delete and item in dstDirs:
+            if dirExists(dst):
+                dirRemove(dst)
+
+        if item not in dstFiles or force or mTime(src) > mTime(dst):
+            if item in dstDirs:
+                if dirExists(dst):
+                    dirRemove(dst)
+            fileCopy(src, dst)
+            cActions += 1
+
+    for item in dstFiles:
+        src = f"{srcPath}/{item}"
+        dst = f"{dstPath}/{item}"
+
+        if delete and item not in srcFiles:
+            if fileExists(dst):
+                fileRemove(dst)
+                dActions += 1
+
+    if not recursive:
+        return (good, cActions, dActions)
+
+    for item in srcDirs:
+        src = f"{srcPath}/{item}"
+        dst = f"{dstPath}/{item}"
+
+        (thisGood, thisC, thisD) = dirUpdate(src, dst, force=force, delete=delete)
+
+        if not thisGood:
+            good = False
+        cActions += thisC
+        dActions += thisD
+
+    for item in dstDirs:
+        src = f"{srcPath}/{item}"
+        dst = f"{dstPath}/{item}"
+
+        if delete and item not in srcDirs:
+            if dirExists(dst):
+                dirRemove(dst)
+                dActions += 1
+
+    return (good, cActions, dActions)
+
+
 def dirMake(path):
     """Creates a directory if it does not already exist as directory."""
     if not dirExists(path):
         os.makedirs(path, exist_ok=True)
 
 
-def dirContents(path):
+def dirContents(path, asSet=False):
     """Gets the contents of a directory.
 
     Only the direct entries in the directory (not recursively), and only real files
@@ -243,14 +342,19 @@ def dirContents(path):
     ----------
     path: string
         The path to the directory on the file system.
+    asSet: boolean, optional False
+        If True, the files and directories will be delivered as sets, otherwise
+        as tuples.
 
     Returns
     -------
     tuple of tuple
         The subdirectories and the files.
+        These are given as names relative to the directory `path`,
+        sp `path` is not prepended to these names.
     """
     if not dirExists(path):
-        return ((), ())
+        return (set(), set()) if asSet else ((), ())
 
     files = []
     dirs = []
@@ -261,7 +365,7 @@ def dirContents(path):
         elif os.path.isdir(f"{path}/{entry}"):
             dirs.append(entry)
 
-    return (tuple(files), tuple(dirs))
+    return (set(files), set(dirs)) if asSet else (tuple(files), tuple(dirs))
 
 
 def dirAllFiles(path, ignore=None):
