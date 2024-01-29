@@ -2,7 +2,9 @@ locations:
   dataIn: ~/local/pure3d/client/input
   dataOut: ~/local/pure3d/client/dist
   partialsIn: «base»/p3d/components
+  viewers: ~/local/pure3d/client/input/viewers
   templates: «base»/p3d/templates
+  texts: «base»/p3d/texts
   images: «base»/p3d/images
   js: «base»/p3d/js
   cssIn: «base»/p3d/css/input-p3d.css
@@ -13,3 +15,18 @@ markdown:
     - abstract
     - description
     - provenance
+
+list:
+  keys:
+    - creator
+    - contributor
+    - institution
+    - place
+    - period
+    - subject
+
+generation:
+  allprojects:
+    title: "Pure3D Projects"
+  alleditions:
+    title: "Pure3D Editions"

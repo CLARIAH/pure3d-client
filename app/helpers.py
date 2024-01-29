@@ -4,6 +4,17 @@ from subprocess import run as run_cmd, CalledProcessError
 from files import unexpanduser as ux
 
 
+def lcFirst(x):
+    if not x:
+        return ""
+
+    return x[0].upper() + x[1:]
+
+
+def prettify(x):
+    return " ".join(lcFirst(w) for w in x.split("_"))
+
+
 def console(*msg, error=False, newline=True):
     msg = " ".join(m if type(m) is str else repr(m) for m in msg)
     msg = "" if not msg else ux(msg)

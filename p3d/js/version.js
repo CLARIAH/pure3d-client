@@ -1,9 +1,9 @@
-function voyagerVersion(page) {
+function viewerVersion(page, viewer) {
   const embed = document.getElementById("viewer3d")
 
-  const e = document.getElementById("v_version")
+  const e = document.getElementById(`v_version_${viewer}`)
   const version = e.value
-  embed.setAttribute("resourceroot", `data/viewers/voyager/${version}`)
+  embed.setAttribute("resourceroot", `files/viewers/${viewer}/${version}`)
   document.getElementById("viewer3d").outerHTML = embed.outerHTML
   console.log("set2")
 
