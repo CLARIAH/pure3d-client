@@ -29,6 +29,7 @@ from tailwind import Tailwind
 COMMENT_RE = re.compile(r"""\{\{!--.*?--}}""", re.S)
 
 CONFIG_FILE = "config.yaml"
+FEATURED_FILE = "featured.yaml"
 TAILWIND_CFG = "tailwind.config.js"
 
 
@@ -38,8 +39,12 @@ class Build:
         localDir = f"{baseDir}/_local"
 
         cfgFile = f"{baseDir}/{CONFIG_FILE}"
+        featuredFile = f"{baseDir}/{FEATURED_FILE}"
+        featured = readYaml(asFile=featuredFile)
         cfg = readYaml(asFile=cfgFile)
+
         self.cfg = cfg
+        self.featured = featured
 
         locations = cfg.locations
         self.locations = locations
@@ -221,6 +226,7 @@ class Build:
                 r = AttrDict()
                 r.template = "p3d-text.html"
                 r.name = prettify(textFile.removesuffix(".html"))
+                r["is" + r.name] = True
                 r.fileName = textFile
                 r.links = getLinks(textFile)
 
@@ -232,16 +238,49 @@ class Build:
             return result
 
         def get_site():
+            featured = self.featured
             info = rawData[kind]
             item = info[0]
             dc = self.htmlify(item.dc)
 
             r = AttrDict()
+            r.isHome = True
             r.template = "p3d-home.html"
             r.fileName = "index.html"
             r.name = dc.title
             r.contentdata = dc
+            projects = self.getData("project")
+            projectsIndex = {str(p.num): p for p in projects}
+            projectsFeatured = []
+
+            for p in featured.projects:
+                p = str(p)
+                if p not in projectsIndex:
+                    console(f"WARNING: featured project {p} does not exist")
+                    continue
+
+                projectsFeatured.append(projectsIndex[p])
+
+            r.projects = projectsFeatured
+
+            return [r]
+
+        def get_projects():
+            r = AttrDict()
+            r.isProject = True
+            r.name = "All Projects"
+            r.template = "p3d-projects.html"
+            r.fileName = "projects.html"
             r.projects = self.getData("project")
+
+            return [r]
+
+        def get_editions():
+            r = AttrDict()
+            r.isEdition = True
+            r.name = "All Editions"
+            r.template = "p3d-editions.html"
+            r.fileName = "editions.html"
             r.editions = self.getData("edition")
 
             return [r]
@@ -643,9 +682,11 @@ class Build:
 
         for target in """
             site
+            textpages
+            projects
+            editions
             projectpages
             editionpages
-            textpages
         """.strip().split():
             if not genTarget(target):
                 good = False
