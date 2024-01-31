@@ -30,3 +30,9 @@ generation:
     title: "Pure3D Projects"
   alleditions:
     title: "Pure3D Editions"
+
+viewers:
+  default: voyager
+  voyager:
+    element: voyager-explorer
+    defaultVersion: "0.36.0"

@@ -1,4 +1,5 @@
 import sys
+import re
 from subprocess import run as run_cmd, CalledProcessError
 
 from files import unexpanduser as ux
@@ -13,6 +14,55 @@ def lcFirst(x):
 
 def prettify(x):
     return " ".join(lcFirst(w) for w in x.split("_"))
+
+
+VERSION_RE = re.compile(r"""^([0-9]*)(.*)""")
+
+
+def versionRepl(part):
+    match = VERSION_RE.match(part)
+    return tuple(match.group(1, 2))
+
+
+def dottedKey(version):
+    return tuple(versionRepl(part) for part in version.split("."))
+
+
+def genViewerSelector(
+    allViewers,
+    chosenViewer,
+    chosenVersion,
+    origViewer,
+    origVersion,
+    fileBase,
+):
+    html = []
+
+    for viewer, vwDefault, versions in allViewers:
+        viewerRep = f"<b>{viewer}</b>" if vwDefault else viewer
+        viewerRep = f"<i>{viewerRep}</i>" if viewer == origViewer else viewerRep
+        html.append(f"""<details><summary>{viewerRep}</summary>""")
+
+        for version, vvDefault in versions:
+            versionRep = f"<b>{version}</b>" if vwDefault and vvDefault else version
+            versionRep = (
+                f"<i>{versionRep}</i>"
+                if viewer == origViewer and version == origVersion
+                else versionRep
+            )
+            entry = (
+                f"""<span>{versionRep}</span>"""
+                if viewer == chosenViewer and version == chosenVersion
+                else (
+                    f"""<a href="/{fileBase}-{viewer}-{version}.html">"""
+                    f"""{versionRep}</a>"""
+                )
+            )
+            html.append(f"<div>{entry}</div>")
+
+        html.append("</details>")
+
+    return "\n".join(html)
 
 
 def console(*msg, error=False, newline=True):

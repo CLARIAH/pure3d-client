@@ -1,5 +1,6 @@
 import sys
 import re
+from copy import deepcopy
 
 from pybars import Compiler
 from markdown import markdown
@@ -12,6 +13,7 @@ from files import (
     baseNm,
     stripExt,
     abspath,
+    writeYaml,
     readYaml,
     readJson,
     writeJson,
@@ -19,8 +21,8 @@ from files import (
     dirAllFiles,
     expanduser as ex,
 )
-from generic import AttrDict
-from helpers import console, prettify
+from generic import AttrDict, deepAttrDict, deepdict
+from helpers import console, prettify, dottedKey, genViewerSelector
 from tailwind import Tailwind
 
 
@@ -118,7 +120,7 @@ class Build:
                 r[f"{k}Comma"] = (
                     ""
                     if len(v) == 0
-                    else str(v)
+                    else str(v[0])
                     if len(v) == 1
                     else ", ".join(str(e) for e in v[0:-1]) + f" and {v[-1]}"
                 )
@@ -167,17 +169,37 @@ class Build:
 
         def get_viewers():
             dataOutDir = cfg.locations.dataOut
-            viewerDir = f"{dataOutDir}/viewers"
 
-            result = {}
+            viewerDir = f"{dataOutDir}/viewers"
+            viewerSettings = cfg.viewers
+            defaultViewer = viewerSettings.default
+            defaultVersion = viewerSettings[defaultViewer].defaultVersion
+
+            result = []
 
             for viewer in dirContents(viewerDir)[1]:
-                result[viewer] = dict(
-                    name=viewer,
-                    versions=[
-                        dict(name=version)
-                        for version in dirContents(f"{viewerDir}/{viewer}")[1]
-                    ],
+                theseSettings = viewerSettings[viewer] or AttrDict()
+                element = theseSettings.element or viewer
+                isDefault = viewer == defaultViewer
+
+                result.append(
+                    AttrDict(
+                        name=viewer,
+                        element=element,
+                        isDefault=isDefault,
+                        versions=[
+                            AttrDict(
+                                name=version,
+                                isDefault=isDefault and version == defaultVersion,
+                            )
+                            for version in reversed(
+                                sorted(
+                                    dirContents(f"{viewerDir}/{viewer}")[1],
+                                    key=dottedKey,
+                                )
+                            )
+                        ],
+                    )
                 )
 
             return result
@@ -248,7 +270,6 @@ class Build:
 
         def get_edition():
             info = rawData[kind]
-            viewers = self.getData("viewers")
 
             result = []
 
@@ -269,7 +290,6 @@ class Build:
                 r.description = dc.description
                 r.subjects = dc.subject
                 r.published = item.isPublished
-                r.viewers = viewers
                 result.append(r)
 
             return result
@@ -314,7 +334,6 @@ class Build:
                     er.name = eItem.title
                     er.contentdata = edc
                     er.published = eItem.isPublished
-                    er.settings = eItem.settings
 
                     pr.editions.append(er)
 
@@ -323,6 +342,16 @@ class Build:
             return result
 
         def get_editionpages():
+            viewers = self.getData("viewers")
+            viewersLean = tuple(
+                (
+                    vw.name,
+                    vw.isDefault,
+                    tuple((vv.name, vv.isDefault) for vv in vw.versions),
+                )
+                for vw in viewers
+            )
+
             pInfo = rawData["project"]
             eInfo = rawData["edition"]
 
@@ -338,7 +367,7 @@ class Build:
                 pId = pItem._id["$oid"]
                 pNo = pMap.get(pId, pId)
                 projectFileName = f"project/{pNo}/index.html"
-                projectName = pItem.get("name", pNo)
+                projectName = pItem.get("title", pNo)
 
                 for eItem in editionByProject.get(pId, []):
                     eId = eItem._id["$oid"]
@@ -350,14 +379,49 @@ class Build:
                     er.projectNum = pNo
                     er.projectName = projectName
                     er.projectFileName = projectFileName
-                    er.fileName = f"project/{pNo}/edition/{eNo}/index.html"
+                    fileBase = f"project/{pNo}/edition/{eNo}/index"
                     er.num = eNo
                     er.name = eItem.title
                     er.contentdata = edc
                     er.isPublished = eItem.ispublished
-                    er.settings = eItem.settings
+                    settings = eItem.settings
+                    authorTool = settings.authorTool
+                    origViewer = authorTool.name
+                    origVersion = authorTool.name
+                    er.sceneFile = authorTool.sceneFile
 
-                    result.append(er)
+                    for viewerInfo in viewers:
+                        viewer = viewerInfo.name
+                        element = viewerInfo.element
+                        versions = viewerInfo.versions
+                        isDefaultViewer = viewerInfo.isDefault
+
+                        for versionInfo in versions:
+                            version = versionInfo.name
+                            isDefault = versionInfo.isDefault
+                            ver = deepAttrDict(deepcopy(deepdict(er)))
+                            ver.viewer = viewer
+                            ver.version = version
+                            ver.element = element
+                            ver.fileName = f"{fileBase}-{viewer}-{version}.html"
+                            isDefault = isDefaultViewer and isDefault
+
+                            viewerSelector = genViewerSelector(
+                                viewersLean,
+                                viewer,
+                                version,
+                                origViewer,
+                                origVersion,
+                                fileBase,
+                            )
+
+                            ver.viewerSelector = viewerSelector
+                            result.append(ver)
+
+                            if isDefault:
+                                ver = deepAttrDict(deepcopy(deepdict(ver)))
+                                ver.fileName = f"{fileBase}.html"
+                                result.append(ver)
 
             return result
 
@@ -377,6 +441,7 @@ class Build:
         templateDir = locations.templates
         filesOutDir = f"{dataOutDir}/files"
         projectOutDir = f"{filesOutDir}/project"
+        yamlOutDir = f"{dataOutDir}/yaml"
         Handlebars = self.Handlebars
         partialsIn = locations.partialsIn
         T = self.T
@@ -537,12 +602,18 @@ class Build:
                     good = False
                     continue
 
-                path = f"{dataOutDir}/{item.fileName}"
-                dirPart = dirNm(path)
-                dirMake(dirPart)
+                for genDir, asYaml in ((dataOutDir, False), (yamlOutDir, True)):
+                    path = f"{genDir}/{item.fileName}"
+                    if asYaml:
+                        path = path.rsplit(".", 1)[0] + ".yaml"
+                    dirPart = dirNm(path)
+                    dirMake(dirPart)
 
-                with open(path, "w") as fh:
-                    fh.write(result)
+                    if asYaml:
+                        writeYaml(deepdict(item), asFile=path)
+                    else:
+                        with open(path, "w") as fh:
+                            fh.write(result)
 
                 success += 1
 

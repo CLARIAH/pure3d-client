@@ -7,6 +7,20 @@ from shutil import rmtree, copytree, copy
 from generic import deepAttrDict
 
 
+def str_presenter(dumper, data):
+    """configures yaml for dumping multiline strings
+    Ref: https://stackoverflow.com/questions/8640959/how-can-i-control-what-scalar-form-pyyaml-uses-for-my-data
+    """
+    if data.count('\n') > 0:  # check for multiline string
+        return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+
+
+yaml.add_representer(str, str_presenter)
+yaml.representer.SafeRepresenter.add_representer(str, str_presenter)
+
+
 def normpath(path):
     if path is None:
         return None
@@ -474,4 +488,4 @@ def writeYaml(data, asFile=None):
         return yaml.dump(data, allow_unicode=True)
 
     with open(asFile, "w", encoding="utf8") as fh:
-        yaml.dump(data, fh, allow_unicode=True)
+        yaml.dump(data, fh, allow_unicode=True, line_break=None)

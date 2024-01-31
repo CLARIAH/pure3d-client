@@ -1,17 +1,18 @@
 <!DOCTYPE html>
+Handlebars.registerHelper('eq', (a, b) => a == b)
 <html lang="en" class="scroll-smooth">
 
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PURE 3D {{name}}</title>
   <link rel="icon" type="image/x-icon" href="/images/favicon.png">
-  <link rel="stylesheet" href="/viewers/voyager/0.24.0/fonts/fonts.css">
-  <link rel="stylesheet" href="/viewers/voyager/0.24.0/css/voyager-explorer.dev.css">
+  <link rel="stylesheet" href="/viewers/{{viewer}}/{{version}}/fonts/fonts.css">
+  <link rel="stylesheet" href="/viewers/{{viewer}}/{{version}}/css/voyager-explorer.dev.css">
   <link href="/css/style.css" rel="stylesheet">
-  <script defer="" src="/viewers/voyager/0.31.0/js/voyager-explorer.dev.js"></script>
+  <script defer="" src="/viewers/{{viewer}}/{{version}}/js/voyager-explorer.min.js"></script>
 </head>
 <body class="text-neutral-900">
-  {{> main_navigation }}
+  {{> main_navigation}}
   <main class="w-full max-w-[1500px] mx-auto px-6 mt-10 flex flex-col md:flex-row gap-4">
     <!-- aside -->
     <div class="w-full md:w-1/5 mb-4">
@@ -41,32 +42,20 @@
         <div class="w-full lg:w-1/2 prose">
           <!-- col 1 -->
           <div class="">
-            <voyager-explorer
-              root="files/project/{{ projectNum }}/edition/{{ num }}/"
-              resourceroot="files/viewers/voyager/0.36.0/"
-              document="{{settings.authorTool.sceneFile}}"
+            <{{element}}
+              root="/files/project/{{projectNum}}/edition/{{num}}/"
+              resourceroot="/viewers/{{viewer}}/{{version}}/"
+              document="{{sceneFile}}"
               id="viewer3d"
               class=""
               style="display: block; position: relative; height: 450px"
-            ></voyager-explorer>
+            ></{{element}}>
             <div
               class="
-                w-full text-sm  text-neutral-500 flex items-center justify-end gap-2
+                w-full text-sm  text-neutral-500 flex items-center justify-center gap-2
               "
             >
-              <span>Select viewer version</span>
-              {{#each viewers }}
-              <h4>{{name}}</h4>
-              <select
-                  name=""
-                  id="v_version_{{name}}"
-                  onchange="viewerVersion('{{fileName}}', '{{name}}')"
-                >
-                {{#each versions }}
-                <option class="p-2" value="{{name}}">{{name}}</option>
-                {{/each}}
-              </select>
-              {{/each}}
+            {{{viewerSelector}}}
             </div>
           </div>
         </div>
